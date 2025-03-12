@@ -18,7 +18,7 @@ epsilon = 0.01
 target_update = 10
 buffer_size = 10000
 minimal_size = 500
-batch_size = 64
+batch_size = 70
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device(
     "cpu")
 

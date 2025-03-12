@@ -2,8 +2,6 @@ import random
 import collections
 import numpy as np
 
-
-
 class ReplayBuffer:
     ''' 经验回放池 '''
     def __init__(self, capacity):
