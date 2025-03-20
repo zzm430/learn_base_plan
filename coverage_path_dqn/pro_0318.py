@@ -30,7 +30,7 @@ class PolygonEnv:
         self.path = [self.current_node]
         self.num_nodes = len(self.intersection_nodes)
         self.path_nodes = np.array(self.intersection_nodes)
-        self.s = 0
+        self.current_direction = 'first'  # 当前方向，初始为第一方向
     def _generate_polygon_nodes(self, num_nodes):
         angles = np.linspace(0, 2 * np.pi, num_nodes, endpoint=False)
         nodes = np.array([(np.cos(angle), np.sin(angle)) for angle in angles])
@@ -353,62 +353,125 @@ class PolygonEnv:
         distance = np.linalg.norm(next_pos - current_pos)
         reward = -distance
 
-        # 鼓励对角线移动
-        if next_node in self._get_non_adjacent_nodes(self.current_node):
-            reward += 5
+        # 计算移动方向
+        move_direction = next_pos - current_pos
+        move_direction_norm = np.linalg.norm(move_direction)
+        if move_direction_norm == 0:
+            unit_move_direction = np.array([0, 0])
+        else:
+            unit_move_direction = move_direction / move_direction_norm
 
+        # 根据当前方向给予奖励
+        if self.current_direction == 'first':
+            if self.first_direction is not None:
+                first_direction_norm = np.linalg.norm(self.first_direction)
+                if first_direction_norm > 0:
+                    unit_first_direction = self.first_direction / first_direction_norm
+                    dot_product_first = np.dot(unit_move_direction, unit_first_direction)
+                    reward += 100 * dot_product_first  # 奖励与第一方向的一致性
+        else:
+            if self.second_direction is not None:
+                second_direction_norm = np.linalg.norm(self.second_direction)
+                if second_direction_norm > 0:
+                    unit_second_direction = self.second_direction / second_direction_norm
+                    dot_product_second = np.dot(unit_move_direction, unit_second_direction)
+                    reward += 100 * dot_product_second  # 奖励与第二方向的一致性
+
+        # 更新当前节点和路径
         self.current_node = next_node
         self.visited.add(next_node)
         self.path.append(next_node)
 
+        # 检查是否完成
         done = len(self.visited) == self.num_nodes
-        return self._get_state(), reward, done
-    # def step(self, action):
-    #     next_node = action
-    #     if next_node < 0 or next_node >= self.num_nodes:
-    #         return self._get_state(), -1, True
-    #     if next_node in self.visited:
-    #         return self._get_state(), -10, False
-    #
-    #     current_pos = self.path_nodes[self.current_node]
-    #     next_pos = self.path_nodes[next_node]
-    #     distance = np.linalg.norm(next_pos - current_pos)
-    #     reward = -distance
-    #
-    #     # 鼓励对角线移动
-    #     if next_node in self._get_non_adjacent_nodes(self.current_node):
-    #         reward += 5
-    #
-    #     # 计算移动方向
-    #     move_direction = next_pos - current_pos
-    #     move_direction_norm = np.linalg.norm(move_direction)
-    #     if move_direction_norm == 0:
-    #         unit_move_direction = np.array([0, 0])
-    #     else:
-    #         unit_move_direction = move_direction / move_direction_norm
-    #
-    #     # 计算与第一方向的一致性
-    #     if self.first_direction is not None:
-    #         first_direction_norm = np.linalg.norm(self.first_direction)
-    #         if first_direction_norm > 0:
-    #             unit_first_direction = self.first_direction / first_direction_norm
-    #             dot_product_first = np.dot(unit_move_direction, unit_first_direction)
-    #             reward += 10 * dot_product_first  # 奖励与第一方向的一致性
-    #
-    #     # 计算与第二方向的一致性
-    #     if self.second_direction is not None:
-    #         second_direction_norm = np.linalg.norm(self.second_direction)
-    #         if second_direction_norm > 0:
-    #             unit_second_direction = self.second_direction / second_direction_norm
-    #             dot_product_second = np.dot(unit_move_direction, unit_second_direction)
-    #             reward += 10 * dot_product_second  # 奖励与第二方向的一致性
-    #
-    #     self.current_node = next_node
-    #     self.visited.add(next_node)
-    #     self.path.append(next_node)
 
-        done = len(self.visited) == self.num_nodes
-        return self._get_state(), reward, done
+        # 如果没有完成，自动选择下一个节点
+        if not done:
+            if self.current_direction == 'first':
+                # 沿着第一方向走到下一个节点
+                next_node = self._find_next_node_in_direction(self.first_direction)
+                # 切换到第二方向，找到最近的起始节点
+                start_node = self._find_nearest_node_in_direction(self.second_direction, next_node)
+                self.current_direction = 'second'  # 切换方向
+                # 移动到第二方向的起始节点
+                return self.step(start_node)
+            else:
+                # 沿着第二方向走到下一个节点
+                next_node = self._find_next_node_in_direction(self.second_direction)
+                # 切换到第一方向，找到最近的起始节点
+                start_node = self._find_nearest_node_in_direction(self.first_direction, next_node)
+                self.current_direction = 'first'  # 切换方向
+                # 移动到第一方向的起始节点
+                return self.step(start_node)
+        else:
+            return self._get_state(), reward, done
+
+    def _find_next_node_in_direction(self, direction):
+        """
+        沿着指定方向找到下一个未访问节点。
+        :param direction: 方向向量
+        :return: 下一个未访问节点的索引
+        """
+        current_pos = self.path_nodes[self.current_node]
+        nearest_node = None
+        min_distance = float('inf')
+
+        for i in range(self.num_nodes):
+            if i not in self.visited:
+                node_pos = self.path_nodes[i]
+                move_direction = node_pos - current_pos
+                move_direction_norm = np.linalg.norm(move_direction)
+                if move_direction_norm == 0:
+                    unit_move_direction = np.array([0, 0])
+                else:
+                    unit_move_direction = move_direction / move_direction_norm
+
+                # 计算与目标方向的一致性
+                direction_norm = np.linalg.norm(direction)
+                if direction_norm > 0:
+                    unit_direction = direction / direction_norm
+                    dot_product = np.dot(unit_move_direction, unit_direction)
+                    if dot_product > 0.9:  # 方向一致性阈值
+                        distance = np.linalg.norm(node_pos - current_pos)
+                        if distance < min_distance:
+                            min_distance = distance
+                            nearest_node = i
+
+        return nearest_node if nearest_node is not None else self.current_node
+
+    def _find_nearest_node_in_direction(self, direction, start_node):
+        """
+        沿着指定方向找到最近的未访问节点，作为下一个方向的起始节点。
+        :param direction: 方向向量
+        :param start_node: 起始节点索引
+        :return: 最近的未访问节点的索引
+        """
+        start_pos = self.path_nodes[start_node]
+        nearest_node = None
+        min_distance = float('inf')
+
+        for i in range(self.num_nodes):
+            if i not in self.visited:
+                node_pos = self.path_nodes[i]
+                move_direction = node_pos - start_pos
+                move_direction_norm = np.linalg.norm(move_direction)
+                if move_direction_norm == 0:
+                    unit_move_direction = np.array([0, 0])
+                else:
+                    unit_move_direction = move_direction / move_direction_norm
+
+                # 计算与目标方向的一致性
+                direction_norm = np.linalg.norm(direction)
+                if direction_norm > 0:
+                    unit_direction = direction / direction_norm
+                    dot_product = np.dot(unit_move_direction, unit_direction)
+                    if dot_product > 0.9:  # 方向一致性阈值
+                        distance = np.linalg.norm(node_pos - start_pos)
+                        if distance < min_distance:
+                            min_distance = distance
+                            nearest_node = i
+
+        return nearest_node if nearest_node is not None else start_node
 
     def _get_non_adjacent_nodes(self, node):
         # 简化处理，实际应根据图结构确定
@@ -530,7 +593,7 @@ if __name__ == "__main__":
             custom_polygon.append([x,y])
 
     # 创建环境
-    env = PolygonEnv(swath= 2,custom_nodes=custom_polygon)
+    env = PolygonEnv(swath= 8,custom_nodes=custom_polygon)
 
     # 渲染环境及等间隔路径
     env.render()
