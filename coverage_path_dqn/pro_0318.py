@@ -1,4 +1,5 @@
 import math
+import sys
 
 import numpy as np
 import torch
@@ -8,10 +9,18 @@ import random
 import matplotlib.pyplot as plt
 from shapely.geometry import Polygon, LineString, Point,MultiPoint,MultiLineString,GeometryCollection
 from collections import deque
+from citynode import CityNode
+from learn_base_plan.coverage_path_dqn.citynode import NodeType
+from learn_base_plan.test2 import end_point
+from point import Point
+from typing import List
 
 # 初步思路是先人为构建出关键点
 # 之后构建合适的约束条件用来学习即可
+
 class PolygonEnv:
+    extra_cost = 500
+    dummy_cost = 300
     def __init__(self, num_nodes=5, swath= None, custom_nodes=None):
         """
         初始化多边形环境。
@@ -24,13 +33,17 @@ class PolygonEnv:
         self.second_direction = None
         self.polygon = self.nodes  # 简化为节点列表
         self.swath = swath
-        self.intersection_nodes = self.generate_intersection_nodes()
+        self.intersection_nodes,vector_intersection_nodes = self.generate_intersection_nodes()
         self.current_node = 0
         self.visited = set([self.current_node])
         self.path = [self.current_node]
         self.num_nodes = len(self.intersection_nodes)
         self.path_nodes = np.array(self.intersection_nodes)
         self.current_direction = 'first'  # 当前方向，初始为第一方向
+        self.city_nodes = None   #城市节点数
+        self.dis_martix = None   #代价矩阵
+
+
     def _generate_polygon_nodes(self, num_nodes):
         angles = np.linspace(0, 2 * np.pi, num_nodes, endpoint=False)
         nodes = np.array([(np.cos(angle), np.sin(angle)) for angle in angles])
@@ -222,6 +235,7 @@ class PolygonEnv:
         polygon = self.read_polygon_from_file(file_path)
         all_origin_line = []
         all_intersection_nodes = []
+        all_intersection_nodes_vector= []
         print("读取的多边形坐标点：")
         for point in polygon:
             print(point)
@@ -234,7 +248,7 @@ class PolygonEnv:
         self.first_direction = direction
         trans_polygon = Polygon(polygon)
         #第一方向
-        for i in range(1,int(max_number)):
+        for i in range(1,int(max_number+2)):
             move_dis = i * self.swath
             ordered_move_line = self.translate_edge(longest_edge,direction,move_dis)
             all_origin_line.append(ordered_move_line)
@@ -246,14 +260,17 @@ class PolygonEnv:
         line.append(foot_point)
         line.append(farthest_point)
         second_line = self.extend_line_segment(line)
-        for i in range(0,int(50)):
+        #先将second_line延长到能够完整覆盖整个多边形轮廓
+        use_second_line = self.translate_edge(second_line,a_second_direction,100)
+
+        for i in range(0,int(100)):
             move_dis = i * self.swath
-            ordered_move_line = self.translate_edge(line,second_direction,move_dis)
+            ordered_move_line = self.translate_edge(use_second_line,second_direction,move_dis)
             all_origin_line.append(ordered_move_line)
-        for i in range(0, int(50)):
-            move_dis = i * self.swath
-            ordered_move_line_two = self.translate_edge(line, a_second_direction, move_dis)
-            all_origin_line.append(ordered_move_line_two)
+        # for i in range(0, int(50)):
+        #     move_dis = i * self.swath
+        #     ordered_move_line_two = self.translate_edge(line, a_second_direction, move_dis)
+        #     all_origin_line.append(ordered_move_line_two)
 
         for i in all_origin_line:
             trans_line = LineString(i)
@@ -271,11 +288,15 @@ class PolygonEnv:
                 # 如果是线段，存储起点和终点
                 all_intersection_nodes.append(intersection.coords[0])
                 all_intersection_nodes.append(intersection.coords[-1])
+                list_point = [intersection.coords[0],intersection.coords[-1]]
+                all_intersection_nodes_vector.append(list_point)
             elif isinstance(intersection, MultiLineString):
                 # 如果是多线段，遍历所有线段并存储起点和终点
                 for line in intersection.geoms:
                     all_intersection_nodes.append(line.coords[0])
                     all_intersection_nodes.append(line.coords[-1])
+                    list_point = [intersection.coords[0], intersection.coords[-1]]
+                    all_intersection_nodes_vector.append(list_point)
             elif isinstance(intersection, GeometryCollection):
                 # 如果是几何集合，遍历所有几何对象并处理
                 for geom in intersection.geoms:
@@ -294,7 +315,101 @@ class PolygonEnv:
             else:
                 # 处理其他未知类型（如 Polygon）
                 raise ValueError(f"未知的几何类型: {type(intersection)}")
-        return all_intersection_nodes
+        return all_intersection_nodes,all_intersection_nodes_vector
+
+    def generate_city_nodes(self,all_intersection_nodes_vector):
+            real_track_id = 0
+            for i in all_intersection_nodes_vector:
+                 direction = i[0] - i[1]
+                 angle_direction = math.atan2(direction[1],direction[0]) * 180 / math.pi
+                 real_track_id += 1
+                 distance =  ((i[0][0] - i[1][0]) ** 2 + (i[0][1]-i[1][1]) ** 2) **0.5
+                 node_A = CityNode(i[0],angle_direction, NodeType.ENDPOINT,i[1],real_track_id,distance)
+                 node_B = CityNode(i[1],angle_direction,NodeType.ENDPOINT,i[0],real_track_id,distance)
+                 self.city_nodes.append(node_A)
+                 self.city_nodes.append(node_B)
+
+    @staticmethod
+    def find_intersection(line1:LineString,line2:LineString):
+        if line1.intersection(line2):
+            intersection = line1.intersection(line2)
+            if intersection.geom_type == 'Point':
+                return { "intersect_flag":True,"point":(intersection.x,intersection.y)}
+        else:
+            return {"intersect_flag":False,"point":(0,0)}
+
+    #代价矩阵的计算
+    def generate_dis_matrix(self):
+        size_citys = len(self.city_nodes)
+        self.dis_martix = np.zeros(size_citys,size_citys,dtype=float)
+        for i in range(size_citys):
+            for j in range(i+1):
+                if i == j:
+                    self.dis_martix[i][j] = sys.maxsize
+                else:
+                    if self.city_nodes[i].node_type == NodeType.ENDPOINT and self.city_nodes[j].node_type == NodeType.ENDPOINT:
+                        if self.city_nodes[i].real_track_id == self.city_nodes[j].real_track_id:
+                            self.dis_martix[i][j] = 0
+                        else:
+                            cost = ((self.city_nodes[i].position[0] - self.city_nodes[j][0]) ** 2 + (self.city_nodes[i][1]-self.city_nodes[j][1] ** 2)) **0.5
+                            if self.city_nodes[i].direction == self.city_nodes[j].direction:
+                                cost += PolygonEnv.extra_cost
+                                if abs(self.city_nodes[i].real_track_id - self.city_nodes[j].real_track_id) == 1:
+                                     cost += PolygonEnv.extra_cost
+                                if (self.city_nodes[i].current_track_length + self.city_nodes[j].current_track_length < 100 and
+                                    abs(self.city_nodes[i].real_track_id - self.city_nodes[j].real_track_id) <=5):
+                                    cost += PolygonEnv.extra_cost
+                            else:
+                                line_one = LineString(self.city_nodes[i].position,self.city_nodes[i].previous_node)
+                                line_two = LineString(self.city_nodes[j].position,self.city_nodes[j].previous_node)
+                                result = PolygonEnv.find_intersection(line_one,line_two)
+                                if result["intersect_flag"]:
+                                    dis_intersec_pt = ((self.city_nodes[i].position[0] - self.city_nodes[j].position[0])**2 + \
+                                                       (self.city_nodes[i].position[1] - self.city_nodes[j].position[1]) **2)**0.5
+                                    cost += 5 * dis_intersec_pt
+                                difference_vec_one = tuple(v1 -v2 for v1,v2 in zip(self.city_nodes[i].previous_node,self.city_nodes[i].position))
+                                difference_vec_two = tuple(v1 -v2 for v1,v2 in zip(self.city_nodes[j].previous_node,self.city_nodes[j].position))
+                                angle_diff = PolygonEnv.compute_angle(difference_vec_one,difference_vec_two)
+                                if abs(angle_diff * 180 / math.pi) < 80 and ((self.city_nodes[i].position[0] - self.city_nodes[j].position[0])**2 + \
+                                                       (self.city_nodes[i].position[1] - self.city_nodes[j].position[1]) **2)**0.5 <5 :
+                                    cost += PolygonEnv.extra_cost
+                                    self.dis_martix[i][j] = cost
+                    else:
+                        if self.city_nodes[i].node_type == NodeType.DUMMY or self.city_nodes[j].node_type == NodeType.DUMMY:
+                            self.dis_martix[i][j] = PolygonEnv.dummy_cost
+                        else:
+                            print("the program cant enter here !")
+        for i in range(size_citys):
+            for j in range(i+1,size_citys):
+                self.dis_martix[j][i]= self.dis_martix[i][j]
+        print("compute dis matrix end !")
+
+    @staticmethod
+    def compute_angle(v1,v2):
+        """
+        计算从向量v1到向量v2的角度，逆时针为正，范围是-MPI到MPI
+        v1:第一个二维向量
+        v2:第二个二维向量
+        """
+        v1 = np.asarray(v1).flatten()
+        v2 = np.asarray(v2).flatten()
+
+        if v1.shape != (2,) or v2.shape != (2,):
+            raise ValueError("输入向量必须是二维的")
+
+        norm_v1 = np.linalg.norm(v1)
+        norm_v2 = np.linalg.norm(v2)
+
+        if norm_v1 == 0 or norm_v2 == 0 :
+            raise ValueError("输入向量不能是零向量")
+
+        v1_norm = v1 / norm_v1
+        v2_norm = v2 / norm_v2
+
+        dot = np.dot(v1_norm,v2_norm)
+        det = v1_norm[0] * v2_norm[1] - v1_norm[1] * v2_norm[0]
+
+        theta = np.arctan2(det,dot)
 
     @staticmethod
     def line_segment_intersection(line, edge):
