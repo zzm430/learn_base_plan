@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 from citynode import CityNode
 from learn_base_plan.diagonal_plan_algorithm.citynode import NodeType
 from shapely.geometry import Polygon, LineString, Point,MultiPoint,MultiLineString,GeometryCollection
-from matplotlib.animation import FuncAnimation
 
 class tsp:
     def __init__(self,node_num):
@@ -470,13 +469,6 @@ class tsp:
         xytext = xy[0]*(1 + 0.1), xy[1]*(1 - 0.05)
         ax.annotate("START", xy=xy, xytext=xytext, weight="bold")
 
-        x_coords = [self.x[i] for i in self.stops]  + [self.x[self.stops[0]]]
-        y_coords = [self.y[i] for i in self.stops] + [self.y[self.stops[0]]]
-
-        with open('coordinates.txt','w') as f :
-            for x,y in zip(x_coords,y_coords):
-                f.write(f"{x} {y}\n")  #每行一个坐标
-
         # Show itinerary
         # self.stops = list(range(self.node_num))+[0]
         ax.plot(self.x[self.stops+[self.stops[0]]], self.y[self.stops+[self.stops[0]]], c="blue", linewidth=1, linestyle="--")
@@ -490,75 +482,6 @@ class tsp:
             return image
         else:
             plt.show()
-    # def render(self, return_img=False):
-    #     fig = plt.figure(figsize=(10, 10))
-    #     ax = fig.add_subplot(111)
-    #
-    #     # 初始化数据
-    #     self.x = np.array([x[0] for x in self.node_pos])
-    #     self.y = np.array([x[1] for x in self.node_pos])
-    #
-    #     # 绘制所有节点（初始为灰色）
-    #     ax.scatter(self.x, self.y, c="gray", s=50)
-    #
-    #     # 初始化路径线（透明）
-    #     path, = ax.plot([], [], c="blue", linewidth=1, linestyle="--", alpha=0)
-    #
-    #     # 高亮起点（初始为红色）
-    #     start_idx = self.stops[0]
-    #     start_scatter = ax.scatter(self.x[start_idx], self.y[start_idx], c="red", s=50)
-    #
-    #     # 存储所有高亮点对象
-    #     scatter_objects = [start_scatter]
-    #
-    #     def update(frame):
-    #         # 清除之前的高亮点（保留起点）
-    #         for obj in scatter_objects[1:]:
-    #             obj.remove()
-    #         scatter_objects[1:] = []  # 只保留起点
-    #
-    #         # 当前路径段：从 stops[frame] 到 stops[frame+1]
-    #         start = self.stops[frame]
-    #         end = self.stops[frame + 1]
-    #
-    #         # 更新路径数据
-    #         path.set_data([self.x[start], self.x[end]], [self.y[start], self.y[end]])
-    #         path.set_alpha(1)  # 显示当前路径段
-    #
-    #         # 高亮当前终点节点
-    #         end_scatter = ax.scatter(
-    #             self.x[end],
-    #             self.y[end],
-    #             c="red",
-    #             s=50,
-    #             markeredgecolor="blue"
-    #         )
-    #         scatter_objects.append(end_scatter)
-    #
-    #         return path, *scatter_objects  # 返回所有需要更新的对象
-    #
-    #     # 创建动画（frames 必须是可迭代对象！）
-    #     total_frames = len(self.stops) - 1
-    #     anim = FuncAnimation(
-    #         fig,
-    #         update,
-    #         frames=range(total_frames),  # 关键修正：传入 range(total_frames)
-    #         interval=500,
-    #         blit=True,  # 启用 blit 优化性能
-    #         repeat=False
-    #     )
-    #
-    #     if return_img:
-    #         try:
-    #             anim.save('animation.gif', writer='pillow', fps=2)
-    #             return 'animation.gif'
-    #         except ImportError:
-    #             print("pillow 未安装，无法保存 GIF")
-    #             plt.show()
-    #             return None
-    #     else:
-    #         plt.show()  # 确保动画显示
-    #         return anim  # 返回 anim 防止被垃圾回收
 
 # tsp = tsp([10,10],8,100)
 # print(tsp.node_pos)
