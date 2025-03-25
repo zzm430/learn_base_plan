@@ -1,8 +1,3 @@
-# -*- coding: utf-8 -*-
-# @Author  :
-# @FileName: main.py
-# @Time    : 2024/1/13 14:22
-
 import matplotlib.pyplot as plt
 import numpy as np
 import rl_utils
@@ -12,11 +7,10 @@ from tqdm import tqdm
 
 chos = 1  # chos： 1 随机初始化地图； 0 导入固定地图
 node_num = 20  # stop个数
-map_size = [1,1]
-end_rew = max(map_size)  # 结束奖励
 num_episodes = 5e3  # 训练次数
 
-env = tsp(map_size=map_size,node_num=node_num,end_rew=end_rew)  # TSP env
+env = tsp(node_num=node_num)
+node_num = env.get_node_sum()# TSP env
 agent = Qlearning(alpha=0.2, gamma=0.926, epsilon=0.5,ep_decay=0.999, final_epsilon=1e-10, chos=chos, node_num=node_num)
 return_list = []  # 记录每一条序列的回报
 for i in range(10):  # 显示10个进度条

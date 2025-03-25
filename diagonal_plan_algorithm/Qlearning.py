@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-# @Author  :
-# @FileName: Qlearning.py
-# @Time    : 2024/1/13 14:23
 import random
 
 import numpy as np
