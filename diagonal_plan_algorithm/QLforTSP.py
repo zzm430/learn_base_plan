@@ -11,9 +11,9 @@ from matplotlib.animation import FuncAnimation
 
 class tsp:
     def __init__(self,node_num):
-        self.swath = 2
-        self.extra_cost = 500
-        self.dummy_cost = 400
+        self.swath = 7
+        self.extra_cost = 5
+        self.dummy_cost = 0
         self.node_pos,self.all_intersection_nodes_vector = self.generate_node_pos()  # 随机生成node_num个站点
         self.node_num = len(self.node_pos)
         self.node_pos_dict = {cnt:pos for cnt,pos in zip(range(len(self.node_pos)), self.node_pos)}
@@ -21,6 +21,34 @@ class tsp:
         self.stops = []  # 按顺序记录依次经过了哪些stop
         self.city_nodes = self.generate_city_nodes()
         self.dis_martix = self.reward_matrix()
+        self.origin_render()
+
+    def origin_render(self):
+        fig = plt.figure(figsize=(10, 10))
+        ax = fig.add_subplot(111)
+
+        # Show stops
+        # end_x = self.node_pos[self.stops[0]][0]
+        # end_y = self.node_pos[self.stops[0]][1]
+        # self.x = np.concatenate([np.array([x[0] for x in self.node_pos]) , np.array([end_x])],axis=0)
+        # self.y = np.concatenate([np.array([x[1] for x in self.node_pos]) , np.array([end_y])],axis=0)
+        x_coords = np.array([x[0] for x in self.node_pos])
+        y_coords = np.array([x[1] for x in self.node_pos])
+        # ax.scatter(self.x, self.y, c="red", s=50)
+        plt.scatter(x_coords,y_coords,c='red',s=50)
+
+        for segment in self.all_intersection_nodes_vector:
+            if len(segment) == 2:
+                x_segment = [segment[0][0],segment[1][0]]
+                y_segment = [segment[0][1],segment[1][1]]
+                plt.plot(x_segment,y_segment,'b-',lw=2,alpha= 0.7)
+
+        plt.title("tsp nodes visualization")
+        plt.xlabel("x coordinate")
+        plt.ylabel("y coordinate")
+        plt.legend()
+        plt.grid(True)
+        plt.show()
 
     def get_node_sum(self):
         return self.node_num
@@ -268,7 +296,7 @@ class tsp:
         return [extended_point1, extended_point2]
 
     def generate_node_pos(self):  # 生成浮点坐标
-        file_path = "/home/aiforce/0307_deep_learning/learn_base_plan/coverage_path_dqn/polygonpts.txt"
+        file_path = "/home/aiforce/0307_deep_learning/learn_base_plan/coverage_path_dqn/polygonpts2.txt"
         polygon = self.read_polygon_from_file(file_path)
         all_origin_line = []
         all_intersection_nodes = []
@@ -298,9 +326,9 @@ class tsp:
         line.append(farthest_point)
         second_line = self.extend_line_segment(line)
         # 先将second_line延长到能够完整覆盖整个多边形轮廓
-        use_second_line = self.translate_edge(second_line, a_second_direction, 100)
+        use_second_line = self.translate_edge(second_line, a_second_direction, 300)
 
-        for i in range(0, int(100)):
+        for i in range(0, int(1000)):
             move_dis = i * self.swath
             ordered_move_line = self.translate_edge(use_second_line, second_direction, move_dis)
             all_origin_line.append(ordered_move_line)
@@ -411,16 +439,16 @@ class tsp:
                                         0]) ** 2 + \
                                                        (self.city_nodes[i].position[1] - self.city_nodes[j].position[
                                                            1]) ** 2) ** 0.5
-                                    cost += 5 * dis_intersec_pt
+                                    cost += 5 * dis_intersec_pt + 5
                                 difference_vec_one = tuple(v1 - v2 for v1, v2 in zip(self.city_nodes[i].previous_pos,
                                                                                      self.city_nodes[i].position))
                                 difference_vec_two = tuple(v1 - v2 for v1, v2 in zip(self.city_nodes[j].previous_pos,
                                                                                      self.city_nodes[j].position))
                                 angle_diff = tsp.compute_angle(difference_vec_one, difference_vec_two)
-                                if abs(angle_diff * 180 / math.pi) < 80 and (
+                                if abs(angle_diff * 180 / math.pi) < 80  and (
                                         (self.city_nodes[i].position[0] - self.city_nodes[j].position[0]) ** 2 + \
                                         (self.city_nodes[i].position[1] - self.city_nodes[j].position[
-                                            1]) ** 2) ** 0.5 < 5:
+                                            1]) ** 2) ** 0.5 < 3:
                                     cost += self.extra_cost
                             dis_martix[i][j] = -cost
                     else:
