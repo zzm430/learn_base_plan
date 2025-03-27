@@ -11,8 +11,8 @@ from matplotlib.animation import FuncAnimation
 
 class tsp:
     def __init__(self,node_num):
-        self.swath = 7
-        self.extra_cost = 5
+        self.swath = 8
+        self.extra_cost = 15
         self.dummy_cost = 0
         self.node_pos,self.all_intersection_nodes_vector = self.generate_node_pos()  # 随机生成node_num个站点
         self.node_num = len(self.node_pos)
@@ -318,9 +318,10 @@ class tsp:
             ordered_move_line = self.translate_edge(longest_edge, direction, move_dis)
             all_origin_line.append(ordered_move_line)
         # 第二方向
-        second_direction = (longest_edge[0][0] - longest_edge[1][0], longest_edge[0][1] - longest_edge[1][1])
+        # second_direction = (longest_edge[0][0] - longest_edge[1][0], longest_edge[0][1] - longest_edge[1][1])
+        second_direction = (-direction[1],direction[0])
         self.second_direction = second_direction
-        a_second_direction = (longest_edge[0][1] - longest_edge[1][0], longest_edge[1][1] - longest_edge[0][1])
+        a_second_direction = (direction[1],-direction[0])
         line = []
         line.append(foot_point)
         line.append(farthest_point)
@@ -328,7 +329,7 @@ class tsp:
         # 先将second_line延长到能够完整覆盖整个多边形轮廓
         use_second_line = self.translate_edge(second_line, a_second_direction, 300)
 
-        for i in range(0, int(1000)):
+        for i in range(0, int(200)):
             move_dis = i * self.swath
             ordered_move_line = self.translate_edge(use_second_line, second_direction, move_dis)
             all_origin_line.append(ordered_move_line)
