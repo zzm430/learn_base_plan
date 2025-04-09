@@ -3,6 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 
 from models.common import Encoder, Pointer
+from IPython import embed
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -101,13 +102,17 @@ class DRL4TSP(nn.Module):
         for _ in range(max_steps):
             if not mask.byte().any():
                 break
-
+            print("-------------",_)
             # ... but compute a hidden rep for each element added to sequence
             # (B,H,1)
             decoder_hidden = self.decoder(decoder_input)
             # (B,L)
             probs, last_hh = self.pointer(static_hidden, dynamic_hidden, decoder_hidden, last_hh)
+            # print(probs[0])
+            # print(last_hh[0][0])
+
             probs = F.softmax(probs + mask.log(), dim=1)
+            # print(probs[0])
 
             # When training, sample the next step according to its probability.
             # During testing, we can take the greedy approach and choose highest
@@ -142,8 +147,13 @@ class DRL4TSP(nn.Module):
             if self.mask_fn is not None:
                 mask = self.mask_fn(mask, dynamic, ptr.data).detach()
 
+            print(logp[0])
+
             tour_logp.append(logp.unsqueeze(1))
             tour_idx.append(ptr.data.unsqueeze(1))
+
+            temp_value = ptr.view(-1,1,1).expand(-1,input_size,1)
+            print(temp_value[0])
 
             decoder_input = torch.gather(static, 2, ptr.view(-1, 1, 1).expand(-1, input_size, 1)).detach()
 

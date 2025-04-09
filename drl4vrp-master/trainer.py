@@ -14,10 +14,9 @@ import numpy as np
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
-
+from IPython import embed
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 
 def validate(data_loader, actor, reward_fn, render_fn=None, save_dir=".", num_plot=5):
     """Used to monitor progress on a validation set & optionally plot solution."""
@@ -103,11 +102,15 @@ def train(
             # Full forward pass through the dataset
             tour_indices, tour_logp = actor(static, dynamic, x0)
 
+            print(tour_indices[0])
+            print(tour_logp[0])
+
             # Sum the log probabilities for each city in the tour
             reward = reward_fn(static, tour_indices)
 
             # Query the critic for an estimate of the reward
             critic_est = critic(static, dynamic).view(-1)
+
 
             advantage = reward - critic_est
             actor_loss = torch.mean(advantage.detach() * tour_logp.sum(dim=1))

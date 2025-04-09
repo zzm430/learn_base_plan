@@ -16,6 +16,7 @@ from torch.utils.data import Dataset
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from IPython import embed
 
 
 class TSPDataset(Dataset):
