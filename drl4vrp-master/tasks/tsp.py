@@ -10,6 +10,8 @@ __getitem__, which gets processed in trainer.py to be None
 """
 
 import os
+from os import system
+
 import numpy as np
 import torch
 from torch.utils.data import Dataset
@@ -17,7 +19,11 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from IPython import embed
-
+from citynode import  CityNode
+from citynode import NodeType
+import math
+from shapely.geometry import Polygon, LineString, Point,MultiPoint,MultiLineString,GeometryCollection
+from citynode_tor import VectorizedCityNodeSystem,CityNodesBatch
 
 class TSPDataset(Dataset):
 
@@ -33,6 +39,7 @@ class TSPDataset(Dataset):
         self.dynamic = torch.zeros(num_samples, 1, size)
         self.num_nodes = size
         self.size = num_samples
+        self.all_intersection_nodes_vector = None
 
     def __len__(self):
         return self.size
@@ -41,14 +48,12 @@ class TSPDataset(Dataset):
         # (static, dynamic, start_loc)
         return (self.dataset[idx], self.dynamic[idx], [])
 
-
 def update_mask(mask, dynamic, chosen_idx):
     """Marks the visited city, so it can't be selected a second time."""
     mask.scatter_(1, chosen_idx.unsqueeze(1), 0)
     return mask
 
-
-def reward(static, tour_indices):
+def reward(self,static, tour_indices):
     """
     Parameters
     ----------
@@ -60,18 +65,29 @@ def reward(static, tour_indices):
     Euclidean distance between consecutive nodes on the route. of size
     (batch_size, num_cities)
     """
-
     # Convert the indices back into a tour
     idx = tour_indices.unsqueeze(1).expand_as(static)
     tour = torch.gather(static.data, 2, idx).permute(0, 2, 1)
+    trans_value = static.data.permute(0,2,1)
 
-    # Make a full tour by returning to the start
-    y = torch.cat((tour, tour[:, :1]), dim=1)
+    instance = VectorizedCityNodeSystem(extra_cost=5.0,dummy_cost=10.0)
 
-    # Euclidean distance between each consecutive point
-    tour_len = torch.sqrt(torch.sum(torch.pow(y[:, :-1] - y[:, 1:], 2), dim=2))
+    batches_value = instance.create_batch_from_nodes(tour)
 
-    return tour_len.sum(1).detach()
+    rewardes_value = instance.compute_reward_matrix(batches_value)
+
+    #根据索引去获取所有的回报值
+
+    # # Make a full tour by returning to the start
+    # y = torch.cat((tour, tour[:, :1]), dim=1)
+    #
+    # # Euclidean distance between each consecutive point
+    # tour_len = torch.sqrt(torch.sum(torch.pow(y[:, :-1] - y[:, 1:], 2), dim=2))
+
+    # reward_eigen = torch.tensor(betch_one_value)
+
+    return  rewardes_value.detach()
+    # return tour_len.sum(1).detach()
 
 
 def render(static, tour_indices, save_path):
